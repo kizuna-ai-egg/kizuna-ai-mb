@@ -1,5 +1,5 @@
+from datetime import timedelta
 import traceback
-from urllib import response
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette import status
@@ -8,6 +8,8 @@ import urllib3
 import json
 
 from settings import OAuth2Settings, get_github
+from schmas import Token
+import security
 
 # CORS white list
 origins = [
@@ -34,6 +36,8 @@ async def root():
 # github oauth callback
 @app.get("/github/callback", status_code=status.HTTP_200_OK)
 async def github_callback(code: str, state: str, settings: OAuth2Settings = Depends(get_github)):
+    user_info = None
+
     try:
         token = http_client.request(
         'POST', 
@@ -61,11 +65,34 @@ async def github_callback(code: str, state: str, settings: OAuth2Settings = Depe
 
         user_info = json.loads(user_info.data.decode('utf-8'))
 
-        return user_info
-
     except:
         print(traceback.format_exc())
         raise HTTPException(
             status_code=500,
-            detail='Internel Server Error'
+            detail='Faild to request github api'
+        )
+
+    
+    if user_info:
+        access_token = security.create_token(
+            payload={
+                'username': user_info['login'],
+                'id': user_info['id']
+            },
+            expires_delta=timedelta(minutes=security.ACCESS_TOKEN_EXPIRED_MINUTES)
+        )
+
+        refresh_token = security.create_token(
+            payload={
+                'username': user_info['login'],
+                'id': user_info['id']
+            },
+            expires_delta=timedelta(days=security.REFRESH_TOKEN_EXPIRED_DAYS)
+        )
+
+        return Token(token_type='Bearer', access_token=access_token, refresh_token=refresh_token)
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail='Faild to get user information'
         )
