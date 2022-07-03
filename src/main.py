@@ -1,15 +1,19 @@
 from datetime import timedelta
+import os
 import traceback
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from starlette import status
-
 import urllib3
 import json
 
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from starlette import status
+from sqlalchemy.orm import Session
+
 from settings import OAuth2Settings, get_github
-from schmas import Token
-import security
+from schemas import Token, UserIn
+import security, db, service
+
+os.environ['USERNMAE'] = 'UNCLE-LV'
 
 # CORS white list
 origins = [
@@ -28,6 +32,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event('startup')
+async def startup():
+    await db.database.connect()
+
+
+@app.on_event('shutdown')
+async def shutdown():
+    await db.database.disconnect()
+
 
 @app.get("/")
 async def root():
@@ -35,7 +48,7 @@ async def root():
 
 # github oauth callback
 @app.get("/github/callback", status_code=status.HTTP_200_OK)
-async def github_callback(code: str, state: str, settings: OAuth2Settings = Depends(get_github)):
+async def github_callback(code: str, state: str, settings: OAuth2Settings = Depends(get_github), db: Session = Depends(db.get_db)):
     user_info = None
 
     try:
@@ -74,10 +87,14 @@ async def github_callback(code: str, state: str, settings: OAuth2Settings = Depe
 
     
     if user_info:
+        user = UserIn(id=str(user_info['id']), nick_name=user_info['login'], avatar_url=user_info['avatar_url'], type='github')
+        service.login(user, db)
+
         access_token = security.create_token(
             payload={
                 'username': user_info['login'],
-                'id': user_info['id']
+                'id': user_info['id'],
+                'type': 'github'
             },
             expires_delta=timedelta(minutes=security.ACCESS_TOKEN_EXPIRED_MINUTES)
         )
@@ -85,7 +102,8 @@ async def github_callback(code: str, state: str, settings: OAuth2Settings = Depe
         refresh_token = security.create_token(
             payload={
                 'username': user_info['login'],
-                'id': user_info['id']
+                'id': user_info['id'],
+                'type': 'github'
             },
             expires_delta=timedelta(days=security.REFRESH_TOKEN_EXPIRED_DAYS)
         )
