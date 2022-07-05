@@ -13,7 +13,6 @@ from settings import OAuth2Settings, get_github
 from schemas import Token, UserIn
 import security, db, service
 
-os.environ['USERNMAE'] = 'UNCLE-LV'
 
 # CORS white list
 origins = [
