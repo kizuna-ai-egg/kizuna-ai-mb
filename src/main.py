@@ -3,14 +3,13 @@ import traceback
 import urllib3
 import json
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from starlette import status
 from sqlalchemy.orm import Session
 
 from settings import OAuth2Settings, get_github
 from schemas import Token, UserIn
-import security, db, service
+import db, service, security
 
 
 # CORS white list
@@ -90,8 +89,8 @@ async def github_callback(code: str, state: str, settings: OAuth2Settings = Depe
 
         access_token = security.create_token(
             payload={
-                'username': user_info['login'],
                 'id': user_info['id'],
+                'nick_name': user_info['login'],
                 'type': 'github'
             },
             expires_delta=timedelta(minutes=security.ACCESS_TOKEN_EXPIRED_MINUTES)
@@ -99,8 +98,8 @@ async def github_callback(code: str, state: str, settings: OAuth2Settings = Depe
 
         refresh_token = security.create_token(
             payload={
-                'username': user_info['login'],
                 'id': user_info['id'],
+                'nick_name': user_info['login'],
                 'type': 'github'
             },
             expires_delta=timedelta(days=security.REFRESH_TOKEN_EXPIRED_DAYS)
